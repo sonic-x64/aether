@@ -8,8 +8,10 @@ local templatesCreated = false
 
 local enabled = true
 local effectColor = Color3.fromRGB(255, 255, 255)
-local effectType = "Particle"
-                local effectTemplates = {}
+local selectedEffects = {} -- [effectName] = true
+local activeEmitters = {}  -- <--- fix: ensure this exists
+
+local effectLifetime = 3 -- default lifetime
 
 -- ===== YOUR TEMPLATE FACTORY (UNCHANGED) =====
 local function createEffectTemplates()
@@ -798,73 +800,92 @@ local function createEffectTemplates()
 end
 -- ============================================
 
-local function applyColor(root, color)
-	for _, obj in ipairs(root:GetDescendants()) do
-		if obj:IsA("ParticleEmitter")
-		or obj:IsA("Beam")
-		or obj:IsA("Trail") then
-			obj.Color = ColorSequence.new(color)
+local function applyColor(inst, color)
+	for _, d in ipairs(inst:GetDescendants()) do
+		if d:IsA("ParticleEmitter") then
+			d.Color = ColorSequence.new(color)
 		end
 	end
 end
 
-local function emitAll(root)
-	for _, obj in ipairs(root:GetDescendants()) do
-		if obj:IsA("ParticleEmitter") then
-			obj:Emit(obj.Rate > 0 and obj.Rate or 10)
+-- ===== EMIT PARTICLES =====
+local function emitAll(inst)
+	for _, d in ipairs(inst:GetDescendants()) do
+		if d:IsA("ParticleEmitter") then
+			d.Color = ColorSequence.new(effectColor)
+			table.insert(activeEmitters, d)
+
+			local count = d:GetAttribute("EmitCount") or d.Rate or 10
+			d:Emit(count)
 		end
 	end
 end
 
-function HitEffects:Play(targetCharacter)
-	if not enabled then return end
-	if not targetCharacter then return end
+-- ===== HIT EFFECTS API =====
+function HitEffects:SetSelectedEffects(list)
+	selectedEffects = {}
+	for _, name in ipairs(list or {}) do
+		selectedEffects[name] = true
+	end
+end
 
-	local root =
-		targetCharacter:FindFirstChild("HumanoidRootPart")
-		or targetCharacter:FindFirstChild("Torso")
-		or targetCharacter:FindFirstChild("UpperTorso")
+function HitEffects:AddEffect(name)
+	selectedEffects[name] = true
+end
 
-	if not root then return end
+function HitEffects:RemoveEffect(name)
+	selectedEffects[name] = nil
+end
+
+function HitEffects:ClearEffects()
+	selectedEffects = {}
+end
+
+function HitEffects:SetColor(color)
+	effectColor = color
+
+	for i = #activeEmitters, 1, -1 do
+		local emitter = activeEmitters[i]
+		if emitter and emitter.Parent then
+			emitter.Color = ColorSequence.new(color)
+		else
+			table.remove(activeEmitters, i)
+		end
+	end
+end
+
+function HitEffects:SetLifetime(seconds)
+	effectLifetime = seconds
+end
+
+function HitEffects:Play(character)
+	if not character then return end
 
 	createEffectTemplates()
 
-	local template = effectTemplates[effectType]
-	if not template then return end
+	local root =
+		character:FindFirstChild("HumanoidRootPart")
+		or character:FindFirstChild("Torso")
+		or character:FindFirstChild("UpperTorso")
 
-	local effect = template:Clone()
-	applyColor(effect, effectColor)
-	effect.Parent = root
+	if not root then return end
 
-	emitAll(effect)
+	for effectName in pairs(selectedEffects) do
+		local template = effectTemplates[effectName]
+		if template then
+			local effect = template:Clone()
+			applyColor(effect, effectColor)
+			effect.Parent = root
 
-	task.delay(3, function()
-		if effect then
-			effect:Destroy()
+			emitAll(effect)
+
+			task.delay(effectLifetime, function()
+				if effect then
+					effect:Destroy()
+				end
+			end)
 		end
-	end)
-end
-
--- ===== CONFIG API =====
-function HitEffects:SetEnabled(v)
-	enabled = v
-end
-
-function HitEffects:SetEffectType(t)
-	effectType = t
-end
-
-function HitEffects:SetEffectColor(c)
-	effectColor = c
-end
-
-function HitEffects:GetAvailableEffects()
-	local list = {}
-	for k in pairs(effectTemplates) do
-		table.insert(list, k)
 	end
-	return list
 end
 
 return HitEffects
-
