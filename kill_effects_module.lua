@@ -859,33 +859,39 @@ function HitEffects:SetLifetime(seconds)
 end
 
 function HitEffects:Play(character)
-	if not character then return end
+    if not character then return end
 
-	createEffectTemplates()
+    createEffectTemplates()
 
-	local root =
-		character:FindFirstChild("HumanoidRootPart")
-		or character:FindFirstChild("Torso")
-		or character:FindFirstChild("UpperTorso")
+    local root =
+        character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("Torso")
+        or character:FindFirstChild("UpperTorso")
 
-	if not root then return end
+    if not root then return end
 
-	for effectName in pairs(selectedEffects) do
-		local template = effectTemplates[effectName]
-		if template then
-			local effect = template:Clone()
-			applyColor(effect, effectColor)
-			effect.Parent = root
+    for effectName in pairs(selectedEffects) do
+        local template = effectTemplates[effectName]
+        if template then
+            local effect = template:Clone()
+            applyColor(effect, effectColor)
+            effect.Parent = root
 
-			emitAll(effect)
+            for _, d in ipairs(effect:GetDescendants()) do
+                if d:IsA("ParticleEmitter") then
+                    d.Lifetime = NumberRange.new(0, effectLifetime)
+                end
+            end
 
-			task.delay(effectLifetime, function()
-				if effect then
-					effect:Destroy()
-				end
-			end)
-		end
-	end
+            emitAll(effect)
+
+            task.delay(effectLifetime, function()
+                if effect then
+                    effect:Destroy()
+                end
+            end)
+        end
+    end
 end
 
 return HitEffects
