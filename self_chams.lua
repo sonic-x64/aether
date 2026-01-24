@@ -19,7 +19,7 @@ local heatConnection
 
 local cachedData = {
 	parts = {},
-	accessories = {}, -- New cache for hats/hair
+	accessories = {},
 	clothing = {},
 	bodyColors = nil,
 }
@@ -59,7 +59,6 @@ local function cacheCharacter(char)
 	cachedData.bodyColors = nil
 
 	for _, child in ipairs(char:GetChildren()) do
-		-- Cache R15 Body Parts
 		if isR15Part(child.Name) and (child:IsA('MeshPart') or child:IsA('BasePart')) then
 			cachedData.parts[child.Name] = {
 				Material = child.Material,
@@ -68,11 +67,9 @@ local function cacheCharacter(char)
 				Reflectance = child.Reflectance,
 				TextureID = child:IsA('MeshPart') and child.TextureID or nil,
 			}
-		-- Cache Accessories (Hair, Hats, etc.)
 		elseif child:IsA("Accessory") then
 			local handle = child:FindFirstChild("Handle")
 			if handle and (handle:IsA("MeshPart") or handle:IsA("BasePart")) then
-				-- We use the accessory instance itself as the key
 				cachedData.accessories[child] = {
 					Material = handle.Material,
 					Color = handle.Color,
@@ -186,19 +183,31 @@ end
 local function applyChams(char, heatPulse, skipParticles)
 	if not char then return end
 
-	-- Helper to apply properties to any part (body part or accessory handle)
+	-- Helper function to apply properties to a part based on a final transparency value
 	local function applyPropsToPart(p, finalTransparency)
 		p.Material = Enum.Material[material]
 		p.Color = color
 		if p:IsA('MeshPart') then p.TextureID = '' end
 		p.Reflectance = reflectance
-		-- Only apply transparency if the part exists normally
 		if p.Transparency < 1 then
 			p.Transparency = finalTransparency
 		end
 	end
 
-	-- Remove clothing textures
+	-- Helper to calculate heat transparency based on a map key (e.g., 'Head')
+	local function getHeatTrans(heatmapKey)
+		local trans = transparency
+		if effect == 'heat' and heatMap[heatmapKey] then
+			local base = heatMap[heatmapKey]
+			if heatPulse then
+				trans = base + (math.min(base + 0.2, 1) - base) * heatPulse
+			else
+				trans = base
+			end
+		end
+		return trans
+	end
+
 	for _, desc in ipairs(char:GetDescendants()) do
 		if desc:IsA('Pants') or desc:IsA('Shirt') then
 			pcall(function() desc:Destroy() end)
@@ -206,27 +215,21 @@ local function applyChams(char, heatPulse, skipParticles)
 	end
 
 	for _, child in ipairs(char:GetChildren()) do
-		-- Handle R15 Body Parts (Includes Heat Logic)
+		-- Handle R15 Body Parts
 		if isR15Part(child.Name) then
-			local trans = transparency
-			if effect == 'heat' and heatMap[child.Name] then
-				local base = heatMap[child.Name]
-				if heatPulse then
-					trans = base + (math.min(base + 0.2, 1) - base) * heatPulse
-				else
-					trans = base
-				end
-			end
-
+			-- Calculate heat based on the part's specific name
+			local finalTrans = getHeatTrans(child.Name)
 			if child:IsA('MeshPart') or child:IsA('BasePart') then
-				pcall(function() applyPropsToPart(child, trans) end)
+				pcall(function() applyPropsToPart(child, finalTrans) end)
 			end
 
-		-- Handle Accessories (Hats, hair, etc.) - No heat logic applies here
+		-- Handle Accessories (Hats, hair, etc.)
 		elseif child:IsA("Accessory") then
 			local handle = child:FindFirstChild("Handle")
 			if handle and (handle:IsA("MeshPart") or handle:IsA("BasePart")) then
-				pcall(function() applyPropsToPart(handle, transparency) end)
+				-- Apply the 'Head' heat value to all accessories
+				local finalTrans = getHeatTrans('Head')
+				pcall(function() applyPropsToPart(handle, finalTrans) end)
 			end
 		end
 	end
@@ -246,7 +249,6 @@ local function restoreCharacter(char)
 	if not char then return end
 	removeParticles(char)
 
-	-- Restore Body Parts
 	for _, part in ipairs(char:GetChildren()) do
 		if isR15Part(part.Name) and cachedData.parts[part.Name] then
 			local data = cachedData.parts[part.Name]
@@ -262,9 +264,8 @@ local function restoreCharacter(char)
 		end
 	end
 
-	-- Restore Accessories
 	for acc, data in pairs(cachedData.accessories) do
-		if acc and acc.Parent == char then -- Ensure accessory still exists on char
+		if acc and acc.Parent == char then
 			local handle = acc:FindFirstChild("Handle")
 			if handle then
 				pcall(function()
@@ -280,7 +281,6 @@ local function restoreCharacter(char)
 		end
 	end
 
-	-- Restore Clothing templates
 	if cachedData.clothing.Shirt then
 		pcall(function()
 			local shirt = Instance.new('Shirt')
@@ -349,7 +349,7 @@ function selfChams:setEnabled(val)
 
 		charConnection = lp.CharacterAdded:Connect(function(newChar)
 			newChar:WaitForChild('Humanoid')
-			task.wait(1.1) -- Wait for accessories to load
+			task.wait(1.1)
 			if enabled then
 				cacheCharacter(newChar)
 				applyChams(newChar)
