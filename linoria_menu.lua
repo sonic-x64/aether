@@ -4040,7 +4040,7 @@ Size = UDim2.new(0, TabButtonWidth + 8 + 4, 1, -10);
 			local Highlight = Library:Create('Frame', {
 				BackgroundColor3 = Library.AccentColor;
 				BorderSizePixel = 0;
-				Size = UDim2.new(1, 0, 0, 2);
+				Size = UDim2.new(1, 0, 0, 1);
 				ZIndex = 5;
 				Parent = BoxInner;
 			});
